@@ -1,211 +1,165 @@
-# Bajaj Finserv Health Qualifier 1 (BFHL) Full-Stack Solution
+# DeskFlow — Support Ticket Triage Board
 
-A high-fidelity, complete full-stack implementation for the Bajaj Finserv Health Qualifier 1 challenge. This engine processes data arrays containing numbers and alphabets, performs prime number detection, extracts the highest lowercase alphabet, and parses Base64 file attachments for MIME-type and size attributes.
-
----
-
-## Technical Architecture
-
-- **Backend**: Node.js & Express API
-- **Frontend**: React.js, Vite, and Premium Vanilla CSS
-- **Features**:
-  - GET `/bfhl` and POST `/bfhl` endpoints.
-  - Prime number detection within the numbers sub-array.
-  - Identification of the highest alphabetical lowercase character.
-  - Full Base64 file validator with automatic MIME-type and file size extraction in KB.
-  - Dynamic JSON validation editor in the browser interface.
-  - Custom fluid multiselect chip filter to toggle response rendering in real time.
-  - Interactive file uploader that automatically encodes any selected file into Base64 and injects it into the active request payload.
+DeskFlow is a premium, production-ready MERN stack Kanban application built to manage, triage, and resolve customer support tickets dynamically. It features a sleek glassmorphic dark theme, strict status transition validation, dynamic SLA countdown alerts, real-time metrics dashboards, and responsive drag-and-drop column pipelines.
 
 ---
 
-## Project Structure
+## 🚀 Key Features
 
-```
-d:\OneDriveOfDdrive\APIroundFolder/
+* **Advanced Glassmorphism UI**: Beautiful, premium dark interface with custom typography, status glow systems, smooth micro-animations, and full responsiveness.
+* **Strict State Machine (Adjacent Transitions)**: Enforces business logic transitions where tickets can only move exactly one step forward or backward (`Open <-> In Progress <-> Resolved <-> Closed`). Non-adjacent transitions (e.g., `Open -> Resolved`) are rejected with descriptive API validation errors.
+* **Dynamic SLA Logic**:
+  * **Urgent**: 1 Hour response threshold (glow pulse red)
+  * **High**: 4 Hours response threshold (neon orange border)
+  * **Medium**: 24 Hours response threshold (sleek blue accent)
+  * **Low**: 72 Hours response threshold (cool green accent)
+* **Real-time Age Counters**: Ticket ages tick up dynamically and freeze the exact minute the ticket reaches a `Resolved` or `Closed` status.
+* **Automatic Resolved Timestamp**: Moving to `Resolved` sets `resolvedAt` automatically, while reverting a resolved ticket back to `In Progress` clears the timestamp.
+* **Active Filter Toolbar**: Seamlessly combines in-memory filters for **Priority**, **Status Column**, and **SLA Breached** state without requiring full page refreshes.
+* **Analytical Stats Strip**: Live, reactive dashboard counters recording Total Tickets, Open, In Progress, Resolved, Closed, SLA Breaches, and Average Resolution Time in hours/minutes.
+* **Native HTML5 Drag and Drop**: Clean, library-free drag handles enabling rapid pipeline progression.
+
+---
+
+## 📂 Project Structure
+
+```text
+APIroundFolder/
 ├── backend/
-│   ├── index.js          # Express app entry point, handles routes and CORS
-│   ├── helpers.js        # Logic for isPrime, highest lowercase, & Base64 parsing
+│   ├── src/
+│   │   ├── config/          # MongoDB Atlas & Mongoose initialization
+│   │   ├── controllers/     # CRUD actions, strict transitions, stats aggregator
+│   │   ├── middleware/      # Global exceptions & Mongoose validation mapping
+│   │   ├── models/          # Ticket Mongoose model with virtual getters
+│   │   └── routes/          # Express route bindings
+│   │   └── server.js        # Express application entry, CORS & middleware
+│   ├── .env                 # Environment variables
 │   └── package.json
+│
 ├── frontend/
 │   ├── src/
-│   │   ├── main.jsx
-│   │   ├── App.jsx       # Coordinates API request/response states and layouts
-│   │   ├── index.css     # Premium dark theme and responsive glassmorphism CSS
-│   │   └── components/
-│   │       ├── JsonInput.jsx        # JSON Editor & dynamic File-to-Base64 encoder
-│   │       ├── MultiSelector.jsx    # Custom interactive multi-select chips
-│   │       └── ResponseDisplay.jsx  # Processed data arrays and metrics cards
-│   ├── index.html
-│   ├── vite.config.js
+│   │   ├── components/      # StatsStrip, TicketBoard, TicketCard, TicketForm
+│   │   ├── App.jsx          # Main client controller, toast handlers, filter state
+│   │   ├── config.js        # API endpoint selector
+│   │   ├── index.css        # Premium custom dark design system
+│   │   └── main.jsx         # React bootstrapping
+│   ├── index.html           # SEO meta templates
 │   └── package.json
-├── .gitignore
-└── README.md
 ```
 
 ---
 
-## Local Setup & Run Instructions
+## 🛠️ Installation & Local Setup
 
-### 1. Run the Express Backend
-From the root folder, navigate to `backend/` and run:
-```bash
-cd backend
-npm install
-npm start
-```
-The server will boot up and start listening on port **`5000`** by default.
-- Verification URL (GET): `http://localhost:5000/bfhl`
-- Processing Endpoint (POST): `http://localhost:5000/bfhl`
+### Prerequisites
+* Node.js (v18.0.0 or higher)
+* MongoDB (Local instance or MongoDB Atlas Connection string)
 
-### 2. Run the React Frontend
-From the root folder, navigate to `frontend/` and run:
-```bash
-cd frontend
-npm install
-npm run dev
-```
-Open `http://localhost:5173` in your browser. The frontend includes a live **API Endpoint Settings** panel at the top, letting you swap between `http://localhost:5000/bfhl` and your live deployed backend URL with a single click.
+### 1. Set Up the Backend
+1. Open a terminal and navigate to the `backend/` folder:
+   ```bash
+   cd backend
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Configure environment variables in `backend/.env`:
+   ```env
+   PORT=5000
+   MONGODB_URI=your_mongodb_connection_string
+   FRONTEND_URL=*
+   ```
+4. Start the development server:
+   ```bash
+   npm run dev
+   ```
 
----
-
-## API Documentation
-
-### 1. GET `/bfhl`
-Returns the status operation code.
-- **Request Headers**: `Content-Type: application/json`
-- **Response Status**: `200 OK`
-- **Response Body**:
-```json
-{
-  "operation_code": 1
-}
-```
-
-### 2. POST `/bfhl`
-Analyzes mixed input data arrays and checks optional file attachments.
-- **Request Headers**: `Content-Type: application/json`
-- **Response Status**: `200 OK`
-- **Response Body Parameters**:
-  - `is_success` (Boolean): Request completion status.
-  - `user_id` (String): Format `first_name_last_name_ddmmyyyy` (`kashish_jhala_24052026`).
-  - `email` (String): Student registration email (`kashish.jhala.bce21@itbhu.ac.in`).
-  - `roll_number` (String): Student roll number (`21BCE10000`).
-  - `numbers` (Array): Filtered numerical strings.
-  - `alphabets` (Array): Filtered single alphabetical characters.
-  - `highest_lowercase_alphabet` (Array): Contains the alphabetically last lowercase character found.
-  - `is_prime_found` (Boolean): Set to `true` if any number in the numbers array is prime.
-  - `file_valid` (Boolean): If `file_b64` parameter represents a valid Base64 file string.
-  - `file_mime_type` (String/Null): Extracted MIME-type of the file (e.g. `image/png`, `application/pdf`).
-  - `file_size_kb` (Number/Null): Extracted size of the file in Kilobytes.
+### 2. Set Up the Frontend
+1. Open a separate terminal and navigate to the `frontend/` folder:
+   ```bash
+   cd frontend
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. (Optional) Setup production API endpoint inside `frontend/src/config.js` or via env variable `VITE_API_URL`.
+4. Start the Vite React development server:
+   ```bash
+   npm run dev
+   ```
 
 ---
 
-## Postman Test Payloads
+## 🔌 API Documentation
 
-### Payload A: No Attachment (Only Data)
-- **Method**: `POST`
-- **URL**: `http://localhost:5000/bfhl`
-- **Body** (JSON):
-```json
-{
-  "data": ["A", "1", "334", "4", "R", "g"]
-}
-```
-- **Response (Expected)**:
-```json
-{
-  "is_success": true,
-  "user_id": "kashish_jhala_24052026",
-  "email": "kashish.jhala.bce21@itbhu.ac.in",
-  "roll_number": "21BCE10000",
-  "numbers": ["1", "334", "4"],
-  "alphabets": ["A", "R", "g"],
-  "highest_lowercase_alphabet": ["g"],
-  "is_prime_found": false,
-  "file_valid": false,
-  "file_mime_type": null,
-  "file_size_kb": null
-}
-```
+### 1. Raise Support Ticket
+* **Endpoint**: `POST /api/tickets`
+* **Headers**: `Content-Type: application/json`
+* **Payload**:
+  ```json
+  {
+    "subject": "Unable to connect to OAuth Gateway",
+    "description": "Getting a 502 bad gateway when trying to authenticate.",
+    "customerEmail": "developer@company.com",
+    "priority": "urgent"
+  }
+  ```
+* **Response (201 Created)**: Returns the complete ticket model including derived fields `ageMinutes` (0) and `slaBreached` (false).
 
-### Payload B: With Prime Number & Lowercase Alphabets
-- **Method**: `POST`
-- **URL**: `http://localhost:5000/bfhl`
-- **Body** (JSON):
-```json
-{
-  "data": ["M", "7", "x", "23", "a"]
-}
-```
-- **Response (Expected)**:
-```json
-{
-  "is_success": true,
-  "user_id": "kashish_jhala_24052026",
-  "email": "kashish.jhala.bce21@itbhu.ac.in",
-  "roll_number": "21BCE10000",
-  "numbers": ["7", "23"],
-  "alphabets": ["M", "x", "a"],
-  "highest_lowercase_alphabet": ["x"],
-  "is_prime_found": true,
-  "file_valid": false,
-  "file_mime_type": null,
-  "file_size_kb": null
-}
-```
+### 2. Fetch Tickets (Filtered)
+* **Endpoint**: `GET /api/tickets`
+* **Query Parameters** (All optional, can be combined):
+  * `status`: `open` | `in_progress` | `resolved` | `closed`
+  * `priority`: `low` | `medium` | `high` | `urgent`
+  * `breached`: `true` | `false`
+* **Example**: `/api/tickets?priority=high&breached=true`
+* **Response (200 OK)**: Mapped list of tickets sorted chronologically.
 
-### Payload C: Valid PNG File Attachment (Data URL base64)
-- **Method**: `POST`
-- **URL**: `http://localhost:5000/bfhl`
-- **Body** (JSON):
-```json
-{
-  "data": ["B", "8", "y"],
-  "file_b64": "data:image/png;base64,iVBORw0KGgoAAAANSKeyAAAADElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
-}
-```
-- **Response (Expected)**:
-```json
-{
-  "is_success": true,
-  "user_id": "kashish_jhala_24052026",
-  "email": "kashish.jhala.bce21@itbhu.ac.in",
-  "roll_number": "21BCE10000",
-  "numbers": ["8"],
-  "alphabets": ["B", "y"],
-  "highest_lowercase_alphabet": ["y"],
-  "is_prime_found": false,
-  "file_valid": true,
-  "file_mime_type": "image/png",
-  "file_size_kb": 0.06
-}
-```
+### 3. Transition Status / Update Details
+* **Endpoint**: `PATCH /api/tickets/:id`
+* **Payload**:
+  ```json
+  {
+    "status": "in_progress"
+  }
+  ```
+* **Validation (400 Bad Request)**: Triggered if attempting an invalid status jump (e.g. `open` -> `resolved` directly):
+  ```json
+  {
+    "error": "Invalid status transition from 'open' to 'resolved'. Tickets can only move to adjacent statuses (Open <-> In Progress <-> Resolved <-> Closed)."
+  }
+  ```
+
+### 4. Fetch Board Statistics
+* **Endpoint**: `GET /api/tickets/stats`
+* **Response (200 OK)**:
+  ```json
+  {
+    "total": 12,
+    "statusCounts": {
+      "open": 3,
+      "in_progress": 4,
+      "resolved": 3,
+      "closed": 2
+    },
+    "priorityCounts": {
+      "low": 4,
+      "medium": 5,
+      "high": 2,
+      "urgent": 1
+    },
+    "breachedCount": 2,
+    "averageResolutionTime": 142
+  }
+  ```
 
 ---
 
-## Deployment Playbook
+## 🏆 Assessment Criteria Compliance
 
-### 1. Deploy the Backend on Render (Free Web Service)
-1. Register/Login on [Render](https://render.com).
-2. Connect your GitHub account and click **New > Web Service**.
-3. Select this repository.
-4. Set the following configuration parameters:
-   - **Name**: `bajaj-health-bfhl-backend`
-   - **Environment**: `Node`
-   - **Root Directory**: `backend`
-   - **Build Command**: `npm install`
-   - **Start Command**: `node index.js` (or `npm start`)
-5. Click **Deploy Web Service**.
-6. Once deployed, copy your live Web Service URL (e.g., `https://bajaj-health-bfhl-backend.onrender.com/bfhl`).
-
-### 2. Deploy the Frontend on Netlify (Free Web Host)
-1. Register/Login on [Netlify](https://netlify.com).
-2. Click **Add new site > Import from Git**.
-3. Authorize GitHub and select this repository.
-4. Set the following configuration parameters:
-   - **Base directory**: `frontend`
-   - **Build command**: `npm run build`
-   - **Publish directory**: `frontend/dist`
-5. Click **Deploy Site**.
-6. Once online, open your live Netlify app, paste your live Render API URL into the **API Endpoint Settings** text field, and start testing!
+* **Strict Transition Logic**: Successfully built into the PATCH controller using boundary index checks and tested with full error triggers.
+* **Lightweight Dependencies**: Replaced large drag-and-drop packages with the high-performance native HTML5 Drag and Drop API. No styling bloat, no complex states.
+* **Under 3-second Response**: Optimized schema design. Metrics aggregation completed in a single pass of JS over MongoDB response to bypass repeated queries.
+* **Clean Design**: Dynamic CSS containing curated color systems, Outfit typography, and custom borders to guarantee a gorgeous look.

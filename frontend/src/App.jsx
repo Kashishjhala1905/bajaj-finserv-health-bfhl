@@ -1,128 +1,301 @@
-import React, { useState } from 'react';
-import JsonInput from './components/JsonInput';
-import MultiSelector from './components/MultiSelector';
-import ResponseDisplay from './components/ResponseDisplay';
+import React, { useState, useEffect } from 'react';
+import StatsStrip from './components/StatsStrip';
+import TicketBoard from './components/TicketBoard';
+import TicketForm from './components/TicketForm';
+import API_BASE_URL from './config';
+import { 
+  Plus, 
+  Filter, 
+  RefreshCw, 
+  AlertCircle, 
+  CheckCircle2, 
+  X,
+  SlidersHorizontal
+} from 'lucide-react';
 
-export default function App() {
-  const [apiUrl, setApiUrl] = useState('http://localhost:5000/bfhl');
-  const [selectedFilters, setSelectedFilters] = useState(['alphabets', 'numbers', 'highest_lowercase_alphabet']);
-  const [responseData, setResponseData] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState(null);
+function App() {
+  const [tickets, setTickets] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [toasts, setToasts] = useState([]);
 
-  const handleFormSubmit = async (payload) => {
-    setIsLoading(true);
-    setErrorMessage(null);
-    setResponseData(null);
+  // Filter States
+  const [priorityFilter, setPriorityFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [breachedFilter, setBreachedFilter] = useState('');
 
+  // Toast System Helper
+  const addToast = (title, message, type = 'error') => {
+    const id = Date.now();
+    setToasts((prev) => [...prev, { id, title, message, type }]);
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+      removeToast(id);
+    }, 5000);
+  };
+
+  const removeToast = (id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  // Fetch Data
+  const fetchData = async () => {
+    setLoading(true);
     try {
-      const response = await fetch(apiUrl, {
+      // Build filter query parameters
+      const params = new URLSearchParams();
+      if (priorityFilter) params.append('priority', priorityFilter);
+      if (statusFilter) params.append('status', statusFilter);
+      if (breachedFilter) params.append('breached', breachedFilter);
+
+      const [ticketsRes, statsRes] = await Promise.all([
+        fetch(`${API_BASE_URL}?${params.toString()}`),
+        fetch(`${API_BASE_URL}/stats`)
+      ]);
+
+      if (!ticketsRes.ok || !statsRes.ok) {
+        throw new Error('Failed to retrieve ticket records');
+      }
+
+      const ticketsData = await ticketsRes.json();
+      const statsData = await statsRes.json();
+
+      setTickets(ticketsData);
+      setStats(statsData);
+    } catch (err) {
+      addToast('Data Sync Failure', err.message || 'Could not connect to the remote DeskFlow server.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [priorityFilter, statusFilter, breachedFilter]);
+
+  // Handle ticket creation
+  const handleCreateTicket = async (formData) => {
+    try {
+      const response = await fetch(API_BASE_URL, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
       });
 
       const data = await response.json();
 
-      if (response.ok) {
-        setResponseData(data);
-      } else {
-        setErrorMessage(data.message || `API Error: Server returned status code ${response.status}`);
+      if (!response.ok) {
+        const errorMsg = data.errors 
+          ? Object.values(data.errors).join(', ') 
+          : (data.message || 'Failed to create ticket');
+        throw new Error(errorMsg);
       }
-    } catch (error) {
-      console.error('Request failed:', error);
-      setErrorMessage(`Network connection failed: Unable to connect to ${apiUrl}. Please make sure the backend server is running and CORS is enabled.`);
-    } finally {
-      setIsLoading(false);
+
+      addToast('Ticket Raised', `Successfully created ticket #${data._id.slice(-6).toUpperCase()}`, 'success');
+      fetchData(); // Refresh board and stats
+      return true;
+    } catch (err) {
+      addToast('Submission Rejected', err.message, 'error');
+      return false;
     }
+  };
+
+  // Handle status transition updates
+  const handleMoveStatus = async (ticketId, targetStatus) => {
+    if (!targetStatus) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/${ticketId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: targetStatus })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || data.message || 'Failed to update status');
+      }
+
+      // Smooth in-memory update for cards to avoid lag
+      setTickets((prevTickets) =>
+        prevTickets.map((t) => (t._id === ticketId ? data : t))
+      );
+
+      // Async fetch stats and tickets in background to synchronize derived states
+      fetch(`${API_BASE_URL}/stats`)
+        .then((res) => res.json())
+        .then((statsData) => setStats(statsData))
+        .catch(() => {});
+
+      addToast('Transition Complete', `Ticket status updated to ${targetStatus.replace('_', ' ')}`, 'success');
+    } catch (err) {
+      addToast('Transition Denied', err.message, 'error');
+    }
+  };
+
+  // Handle ticket deletions
+  const handleDeleteTicket = async (ticketId) => {
+    if (!window.confirm('Are you sure you want to permanently discard this ticket?')) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/${ticketId}`, {
+        method: 'DELETE'
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to delete ticket');
+      }
+
+      setTickets((prev) => prev.filter((t) => t._id !== ticketId));
+      
+      // Sync stats in background
+      fetch(`${API_BASE_URL}/stats`)
+        .then((res) => res.json())
+        .then((statsData) => setStats(statsData))
+        .catch(() => {});
+
+      addToast('Ticket Terminated', 'The support record has been completely discarded.', 'success');
+    } catch (err) {
+      addToast('Operation Failed', err.message, 'error');
+    }
+  };
+
+  const handleClearFilters = () => {
+    setPriorityFilter('');
+    setStatusFilter('');
+    setBreachedFilter('');
   };
 
   return (
     <div className="app-container">
-      {/* Premium Header */}
-      <header className="app-header">
-        <div className="brand-wrapper">
-          <div className="brand-logo-glow">BF</div>
-          <div>
-            <h1 className="brand-title">Bajaj Health Qualifier 1</h1>
-            <span className="brand-subtitle">Automated Data & File Processing Engine</span>
+      {/* Toast Panel */}
+      <div className="toast-container">
+        {toasts.map((t) => (
+          <div key={t.id} className={`toast ${t.type === 'error' ? 'toast-error' : 'toast-success'}`}>
+            {t.type === 'error' ? (
+              <AlertCircle size={18} color="#ef4444" style={{ flexShrink: 0 }} />
+            ) : (
+              <CheckCircle2 size={18} color="#10b981" style={{ flexShrink: 0 }} />
+            )}
+            <div className="toast-content">
+              <div className="toast-title">{t.title}</div>
+              <div style={{ color: '#cbd5e1', fontSize: '0.8rem' }}>{t.message}</div>
+            </div>
+            <button className="toast-close" onClick={() => removeToast(t.id)}>
+              <X size={14} />
+            </button>
           </div>
+        ))}
+      </div>
+
+      {/* App Header */}
+      <header className="app-header">
+        <div className="logo-section">
+          <SlidersHorizontal size={28} />
+          <h1>DeskFlow</h1>
+          <span>Triage Board</span>
         </div>
-        <div className="roll-badge">
-          ROLL: 21BCE10000
+
+        <div className="action-controls">
+          <button className="btn btn-secondary" onClick={fetchData} title="Refresh Board">
+            <RefreshCw size={16} />
+            Refresh
+          </button>
+          <button className="btn btn-primary" onClick={() => setIsFormOpen(true)}>
+            <Plus size={16} />
+            Raise Ticket
+          </button>
         </div>
       </header>
 
-      {/* Main Grid Layout */}
-      <main className="main-grid">
-        {/* Left Hand Column: Inputs */}
-        <section className="left-panel" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          
-          {/* API Configuration Card */}
-          <div className="glass-card">
-            <div className="card-title-wrapper" style={{ marginBottom: '1rem' }}>
-              <span className="card-icon" style={{ color: 'var(--color-secondary)' }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
-                  <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
-                  <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
-                </svg>
-              </span>
-              <h3 className="card-title" style={{ fontSize: '1.1rem' }}>API Endpoint Settings</h3>
-            </div>
-            
-            <div className="input-group" style={{ marginBottom: 0 }}>
-              <label className="input-label">Express Deployed / Local URL</label>
-              <div className="endpoint-config-wrapper">
-                <input
-                  type="text"
-                  className="input-text"
-                  value={apiUrl}
-                  onChange={(e) => setApiUrl(e.target.value)}
-                  placeholder="https://your-backend.onrender.com/bfhl"
-                />
-              </div>
-            </div>
+      {/* Interactive KPI Dashboard */}
+      <StatsStrip stats={stats} loading={loading && !stats} />
+
+      {/* Advanced Filter Toolbar */}
+      <div className="filters-bar">
+        <div className="filters-group">
+          <div className="filter-item">
+            <Filter size={14} style={{ color: '#6b7280' }} />
+            <label htmlFor="priority-select">Priority:</label>
+            <select
+              id="priority-select"
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value)}
+              className="filter-select"
+            >
+              <option value="">All Priorities</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
           </div>
 
-          <JsonInput onSubmit={handleFormSubmit} isLoading={isLoading} />
-        </section>
-
-        {/* Right Hand Column: Outputs */}
-        <section className="right-panel" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          {errorMessage && (
-            <div className="error-box" style={{ margin: 0 }}>
-              <span className="error-icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon>
-                  <line x1="12" y1="8" x2="12" y2="12"></line>
-                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                </svg>
-              </span>
-              <span>{errorMessage}</span>
-            </div>
-          )}
-
-          <div className="glass-card" style={{ paddingBottom: '1rem', paddingTop: '1.5rem' }}>
-            <MultiSelector
-              selectedFilters={selectedFilters}
-              onFilterChange={setSelectedFilters}
-            />
+          <div className="filter-item">
+            <label htmlFor="status-select">Status Column:</label>
+            <select
+              id="status-select"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="filter-select"
+            >
+              <option value="">All Columns</option>
+              <option value="open">Open</option>
+              <option value="in_progress">In Progress</option>
+              <option value="resolved">Resolved</option>
+              <option value="closed">Closed</option>
+            </select>
           </div>
 
-          <ResponseDisplay
-            responseData={responseData}
-            selectedFilters={selectedFilters}
-          />
-        </section>
-      </main>
+          <div className="filter-item">
+            <label className="filter-checkbox">
+              <input
+                type="checkbox"
+                checked={breachedFilter === 'true'}
+                onChange={(e) => setBreachedFilter(e.target.checked ? 'true' : '')}
+              />
+              Show SLA Breached Only
+            </label>
+          </div>
+        </div>
 
-      {/* Footer */}
-      <footer className="app-footer">
-        <p>Bajaj Finserv Health Challenge Qualifier 1 Application • Developed by Kashish Jhala (Roll: 21BCE10000)</p>
-      </footer>
+        {(priorityFilter || statusFilter || breachedFilter) && (
+          <button className="clear-filters-btn" onClick={handleClearFilters}>
+            Clear Active Filters
+          </button>
+        )}
+      </div>
+
+      {/* Main Kanban Pipeline */}
+      {loading && tickets.length === 0 ? (
+        <div className="loading-container">
+          <div style={{ textAlign: 'center' }}>
+            <div className="loading-spinner"></div>
+            <p style={{ marginTop: '1rem', color: '#9c9c9c', fontSize: '0.9rem' }}>
+              Synchronizing with DeskFlow database...
+            </p>
+          </div>
+        </div>
+      ) : (
+        <TicketBoard
+          tickets={tickets}
+          onMoveStatus={handleMoveStatus}
+          onDelete={handleDeleteTicket}
+        />
+      )}
+
+      {/* Create Ticket Modal */}
+      <TicketForm
+        isOpen={isFormOpen}
+        onClose={() => setIsFormOpen(false)}
+        onCreate={handleCreateTicket}
+      />
     </div>
   );
 }
+
+export default App;
