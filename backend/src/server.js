@@ -29,6 +29,7 @@ app.get('/health', (req, res) => {
 
 // Setup Ticket Routes
 app.use('/api/tickets', ticketRoutes);
+app.use('/', ticketRoutes);
 
 // Page Not Found Handler
 app.use((req, res, next) => {
